@@ -1,5 +1,13 @@
-import PageTemplate, { generateMetadata } from './[slug]/page'
+import type { Metadata } from 'next'
 
-export default PageTemplate
+import PageTemplate, { generateMetadata as generatePageMetadata } from './[slug]/page'
 
-export { generateMetadata }
+const getHomeParams = () => Promise.resolve({ slug: 'home' })
+
+export default async function HomePage() {
+  return PageTemplate({ params: getHomeParams() })
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  return generatePageMetadata({ params: getHomeParams() })
+}

@@ -1,14 +1,8 @@
 import type { CollectionSlug, GlobalSlug, Payload, PayloadRequest, File } from 'payload'
 
-import { contactForm as contactFormData } from './contact-form'
-import { contact as contactPageData } from './contact-page'
-import { home } from './home'
-import { image1 } from './image-1'
-import { image2 } from './image-2'
-import { imageHero1 } from './image-hero-1'
-import { post1 } from './post-1'
-import { post2 } from './post-2'
-import { post3 } from './post-3'
+import { pathwayBookAChatForm, pathwayContactForm } from './pathwayForms'
+import { pathwayPages } from './pathwayPages'
+import { pathwayPosts } from './pathwayPosts'
 
 const collections: CollectionSlug[] = [
   'categories',
@@ -18,16 +12,15 @@ const collections: CollectionSlug[] = [
   'forms',
   'form-submissions',
   'search',
+  'redirects',
+  'users',
 ]
 
 const globals: GlobalSlug[] = ['header', 'footer']
 
-const categories = ['Technology', 'News', 'Finance', 'Design', 'Software', 'Engineering']
+const pathwayCategories = ['Leadership', 'Career Growth', 'Resilience']
 
-// Next.js revalidation errors are normal when seeding the database without a server running
-// i.e. running `yarn seed` locally instead of using the admin UI within an active app
-// The app is not running to revalidate the pages and so the API routes are not available
-// These error messages can be ignored: `Error hitting revalidate route for...`
+// Next.js revalidation errors are expected when seeding without a running app.
 export const seed = async ({
   payload,
   req,
@@ -35,19 +28,13 @@ export const seed = async ({
   payload: Payload
   req: PayloadRequest
 }): Promise<void> => {
-  payload.logger.info('Seeding database...')
+  payload.logger.info('Seeding Pathway clone content...')
+  payload.logger.info('— Clearing collections and globals...')
 
-  // we need to clear the media directory before seeding
-  // as well as the collections and globals
-  // this is because while `yarn seed` drops the database
-  // the custom `/api/seed` endpoint does not
-  payload.logger.info(`— Clearing collections and globals...`)
-
-  // clear the database
   await Promise.all(
-    globals.map((global) =>
+    globals.map((globalSlug) =>
       payload.updateGlobal({
-        slug: global,
+        slug: globalSlug,
         data: {
           navItems: [],
         },
@@ -65,157 +52,154 @@ export const seed = async ({
 
   await Promise.all(
     collections
-      .filter((collection) => Boolean(payload.collections[collection].config.versions))
+      .filter((collection) => Boolean(payload.collections[collection]?.config?.versions))
       .map((collection) => payload.db.deleteVersions({ collection, req, where: {} })),
   )
 
-  payload.logger.info(`— Seeding demo author and user...`)
+  payload.logger.info('— Seeding media...')
 
-  await payload.delete({
-    collection: 'users',
-    depth: 0,
-    where: {
-      email: {
-        equals: 'demo-author@example.com',
-      },
-    },
-  })
-
-  payload.logger.info(`— Seeding media...`)
-
-  const [image1Buffer, image2Buffer, image3Buffer, hero1Buffer] = await Promise.all([
+  const [heroBuffer, postBufferOne, postBufferTwo] = await Promise.all([
+    fetchFileByURL('https://preppathway.com/anirban.png'),
     fetchFileByURL(
       'https://raw.githubusercontent.com/payloadcms/payload/refs/heads/main/templates/website/src/endpoints/seed/image-post1.webp',
     ),
     fetchFileByURL(
       'https://raw.githubusercontent.com/payloadcms/payload/refs/heads/main/templates/website/src/endpoints/seed/image-post2.webp',
     ),
-    fetchFileByURL(
-      'https://raw.githubusercontent.com/payloadcms/payload/refs/heads/main/templates/website/src/endpoints/seed/image-post3.webp',
-    ),
-    fetchFileByURL(
-      'https://raw.githubusercontent.com/payloadcms/payload/refs/heads/main/templates/website/src/endpoints/seed/image-hero1.webp',
-    ),
   ])
 
-  const [demoAuthor, image1Doc, image2Doc, image3Doc, imageHomeDoc] = await Promise.all([
+  const [heroMedia, blogImageOne, blogImageTwo] = await Promise.all([
     payload.create({
-      collection: 'users',
+      collection: 'media',
       data: {
-        name: 'Demo Author',
-        email: 'demo-author@example.com',
-        password: 'password',
+        alt: 'Anirban - leadership coach',
       },
+      file: heroBuffer,
     }),
     payload.create({
       collection: 'media',
-      data: image1,
-      file: image1Buffer,
+      data: {
+        alt: 'Leadership growth article visual',
+      },
+      file: postBufferOne,
     }),
     payload.create({
       collection: 'media',
-      data: image2,
-      file: image2Buffer,
+      data: {
+        alt: 'Career resilience article visual',
+      },
+      file: postBufferTwo,
     }),
-    payload.create({
-      collection: 'media',
-      data: image2,
-      file: image3Buffer,
-    }),
-    payload.create({
-      collection: 'media',
-      data: imageHero1,
-      file: hero1Buffer,
-    }),
-    categories.map((category) =>
+  ])
+
+  payload.logger.info('— Seeding users and categories...')
+
+  const pathwayAuthor = await payload.create({
+    collection: 'users',
+    data: {
+      name: 'Anirban Kundu',
+      email: 'anirban@preppathway.com',
+      password: 'password',
+    },
+  })
+
+  const categoryDocs = await Promise.all(
+    pathwayCategories.map((category) =>
       payload.create({
         collection: 'categories',
         data: {
           title: category,
-          slug: category,
+          slug: category.toLowerCase().replace(/\s+/g, '-'),
         },
       }),
     ),
-  ])
+  )
 
-  payload.logger.info(`— Seeding posts...`)
+  payload.logger.info('— Seeding forms...')
 
-  // Do not create posts with `Promise.all` because we want the posts to be created in order
-  // This way we can sort them by `createdAt` or `publishedAt` and they will be in the expected order
-  const post1Doc = await payload.create({
-    collection: 'posts',
-    depth: 0,
-    context: {
-      disableRevalidate: true,
-    },
-    data: post1({ heroImage: image1Doc, blockImage: image2Doc, author: demoAuthor }),
-  })
-
-  const post2Doc = await payload.create({
-    collection: 'posts',
-    depth: 0,
-    context: {
-      disableRevalidate: true,
-    },
-    data: post2({ heroImage: image2Doc, blockImage: image3Doc, author: demoAuthor }),
-  })
-
-  const post3Doc = await payload.create({
-    collection: 'posts',
-    depth: 0,
-    context: {
-      disableRevalidate: true,
-    },
-    data: post3({ heroImage: image3Doc, blockImage: image1Doc, author: demoAuthor }),
-  })
-
-  // update each post with related posts
-  await payload.update({
-    id: post1Doc.id,
-    collection: 'posts',
-    data: {
-      relatedPosts: [post2Doc.id, post3Doc.id],
-    },
-  })
-  await payload.update({
-    id: post2Doc.id,
-    collection: 'posts',
-    data: {
-      relatedPosts: [post1Doc.id, post3Doc.id],
-    },
-  })
-  await payload.update({
-    id: post3Doc.id,
-    collection: 'posts',
-    data: {
-      relatedPosts: [post1Doc.id, post2Doc.id],
-    },
-  })
-
-  payload.logger.info(`— Seeding contact form...`)
-
-  const contactForm = await payload.create({
-    collection: 'forms',
-    depth: 0,
-    data: contactFormData,
-  })
-
-  payload.logger.info(`— Seeding pages...`)
-
-  const [_, contactPage] = await Promise.all([
+  const [contactFormDoc, bookAChatFormDoc] = await Promise.all([
     payload.create({
-      collection: 'pages',
+      collection: 'forms',
       depth: 0,
-      data: home({ heroImage: imageHomeDoc, metaImage: image2Doc }),
+      data: pathwayContactForm,
     }),
     payload.create({
-      collection: 'pages',
+      collection: 'forms',
       depth: 0,
-      data: contactPageData({ contactForm: contactForm }),
+      data: pathwayBookAChatForm,
     }),
   ])
 
-  payload.logger.info(`— Seeding globals...`)
+  payload.logger.info('— Seeding blog posts...')
+
+  const postsToCreate = pathwayPosts({
+    author: pathwayAuthor,
+    heroImage: blogImageOne,
+    secondImage: blogImageTwo,
+    categories: categoryDocs.map((category) => ({ id: Number(category.id) })),
+  })
+
+  const createdPosts = []
+
+  for (const postData of postsToCreate) {
+    const createdPost = await payload.create({
+      collection: 'posts',
+      depth: 0,
+      context: {
+        disableRevalidate: true,
+      },
+      data: postData,
+    })
+
+    createdPosts.push(createdPost)
+  }
+
+  if (createdPosts.length >= 2) {
+    await payload.update({
+      collection: 'posts',
+      id: createdPosts[0].id,
+      depth: 0,
+      data: {
+        relatedPosts: [createdPosts[1].id],
+      },
+      context: {
+        disableRevalidate: true,
+      },
+    })
+
+    await payload.update({
+      collection: 'posts',
+      id: createdPosts[1].id,
+      depth: 0,
+      data: {
+        relatedPosts: [createdPosts[0].id],
+      },
+      context: {
+        disableRevalidate: true,
+      },
+    })
+  }
+
+  payload.logger.info('— Seeding pages...')
+
+  const pagesToCreate = pathwayPages({
+    heroImage: heroMedia,
+    contactFormID: Number(contactFormDoc.id),
+    bookAChatFormID: Number(bookAChatFormDoc.id),
+  })
+
+  for (const pageData of pagesToCreate) {
+    await payload.create({
+      collection: 'pages',
+      depth: 0,
+      context: {
+        disableRevalidate: true,
+      },
+      data: pageData,
+    })
+  }
+
+  payload.logger.info('— Seeding globals...')
 
   await Promise.all([
     payload.updateGlobal({
@@ -225,21 +209,42 @@ export const seed = async ({
           {
             link: {
               type: 'custom',
-              label: 'Posts',
-              url: '/posts',
+              label: 'Home',
+              url: '/',
             },
           },
           {
             link: {
-              type: 'reference',
+              type: 'custom',
+              label: 'About',
+              url: '/about',
+            },
+          },
+          {
+            link: {
+              type: 'custom',
+              label: 'Why Work With Us',
+              url: '/why-work-with-us',
+            },
+          },
+          {
+            link: {
+              type: 'custom',
+              label: 'Blog',
+              url: '/blog',
+            },
+          },
+          {
+            link: {
+              type: 'custom',
               label: 'Contact',
-              reference: {
-                relationTo: 'pages',
-                value: contactPage.id,
-              },
+              url: '/contact',
             },
           },
         ],
+      },
+      context: {
+        disableRevalidate: true,
       },
     }),
     payload.updateGlobal({
@@ -249,32 +254,54 @@ export const seed = async ({
           {
             link: {
               type: 'custom',
-              label: 'Admin',
-              url: '/admin',
+              label: 'About',
+              url: '/about',
             },
           },
           {
             link: {
               type: 'custom',
-              label: 'Source Code',
-              newTab: true,
-              url: 'https://github.com/payloadcms/payload/tree/main/templates/website',
+              label: 'Careers',
+              url: '/careers',
             },
           },
           {
             link: {
               type: 'custom',
-              label: 'Payload',
-              newTab: true,
-              url: 'https://payloadcms.com/',
+              label: 'Contact',
+              url: '/contact',
+            },
+          },
+          {
+            link: {
+              type: 'custom',
+              label: 'Privacy Policy',
+              url: '/privacy',
+            },
+          },
+          {
+            link: {
+              type: 'custom',
+              label: 'Terms of Service',
+              url: '/terms',
+            },
+          },
+          {
+            link: {
+              type: 'custom',
+              label: 'Cookie Policy',
+              url: '/cookies',
             },
           },
         ],
       },
+      context: {
+        disableRevalidate: true,
+      },
     }),
   ])
 
-  payload.logger.info('Seeded database successfully!')
+  payload.logger.info('Seeded Pathway clone content successfully!')
 }
 
 async function fetchFileByURL(url: string): Promise<File> {

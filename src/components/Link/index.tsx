@@ -33,11 +33,14 @@ export const CMSLink: React.FC<CMSLinkType> = (props) => {
     url,
   } = props
 
+  const relationToPathMap: Record<NonNullable<CMSLinkType['reference']>['relationTo'], string> = {
+    pages: '',
+    posts: '/blog',
+  }
+
   const href =
     type === 'reference' && typeof reference?.value === 'object' && reference.value.slug
-      ? `${reference?.relationTo !== 'pages' ? `/${reference?.relationTo}` : ''}/${
-          reference.value.slug
-        }`
+      ? `${relationToPathMap[reference.relationTo]}/${reference.value.slug}`
       : url
 
   if (!href) return null
